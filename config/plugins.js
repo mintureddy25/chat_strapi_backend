@@ -5,7 +5,7 @@ module.exports = () => ({
             contentTypes: ['api::message.message'],
             cors: {
                 enabled:true,
-                origin: ['http://localhost:3000'],
+                origin: [process.env.CORS_ORIGIN  || 'http://localhost:3000'],
                 methods: ['GET', 'POST'], 
                 credentials: true, 
             },
