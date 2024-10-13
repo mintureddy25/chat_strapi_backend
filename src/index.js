@@ -1,60 +1,67 @@
 'use strict';
 
-const sessions = {};
+const { Server } = require('socket.io');
 
 module.exports = {
-  /**
-   * An asynchronous register function that runs before
-   * your application is initialized.
-   *
-   * This gives you an opportunity to extend code.
-   */
-  register({ strapi }) {
-    // Initialize WebSocket on server startup
-    strapi.io.on('connection', (socket) => {
-      console.log('A user connected');
+  async register({ strapi }) {
+    
+  },
 
-      // Listen for session join requests
-      socket.on('joinSession', (sessionId) => {
-        // Store the socket ID by session
-        if (!sessions[sessionId]) {
-          sessions[sessionId] = [];
-        }
-        sessions[sessionId].push(socket.id);
+  async bootstrap({ strapi }) {
+    const io = new Server(strapi.server.httpServer, {
+      cors: {
+        origin: 'http://localhost:3000', 
+        methods: ['GET', 'POST'],
+        allowedHeaders: ['my-custom-header'],
+        credentials: true,
+      },
+    });
+
+    const userSessions = {}; 
+
+    
+    io.on('connection', (socket) => {
+      console.log('A user connected:', socket.id);
+
+      // Join a session and associate with user ID
+      socket.on('joinSession', ({ sessionId, userId }) => {
         socket.join(sessionId);
-        console.log(`Socket ${socket.id} joined session ${sessionId}`);
+       
+        userSessions[socket.id] = { sessionId, userId };
+        console.log(`User ${userId} joined session: ${sessionId}`);
       });
 
-      // Listen for incoming messages
-      socket.on('message', ({ sessionId, content }) => {
-        console.log('Received message:', content);
+      
+      socket.on('message', ({ sessionId, content, recipientId }) => {
+        console.log('Message received:', content);
 
-        // Emit the message to the specific session
-        if (sessions[sessionId]) {
-          strapi.io.to(sessionId).emit('message', { content, sessionId });
+       
+        const messageData = {
+          content,
+          timestamp: new Date().toISOString(),
+          senderId: userSessions[socket.id].userId,
+          id: Date.now(),
+          server: true
+        };
+
+        
+        const recipientSocketId = Object.keys(userSessions).find(
+          (id) => userSessions[id].userId === recipientId && userSessions[id].sessionId === sessionId
+        );
+
+        if (recipientSocketId) {
+         
+          io.to(recipientSocketId).emit('message', messageData);
+        } else {
+          console.log(`User ${recipientId} not found in session ${sessionId}`);
         }
       });
 
+      // Handle disconnection
       socket.on('disconnect', () => {
-        console.log('User disconnected');
-
-        // Remove socket from sessions on disconnect
-        for (const sessionId in sessions) {
-          sessions[sessionId] = sessions[sessionId].filter(id => id !== socket.id);
-          if (sessions[sessionId].length === 0) {
-            delete sessions[sessionId]; // Clean up empty sessions
-          }
-        }
+        console.log('User disconnected:', socket.id);
+        delete userSessions[socket.id]; 
       });
     });
   },
-
-  /**
-   * An asynchronous bootstrap function that runs before
-   * your application gets started.
-   *
-   * This gives you an opportunity to set up your data model,
-   * run jobs, or perform some special logic.
-   */
-  bootstrap(/*{ strapi }*/) {},
 };
